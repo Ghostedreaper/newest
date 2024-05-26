@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generis: Integrated with FS-IRDM</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 0;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .chat-box,
+        .input-box,
+        .slider-container {
+            margin-bottom: 20px;
+        }
+
+        .input-box input {
+            width: calc(100% - 80px);
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #333;
+            background-color: #333;
+            color: #fff;
+            border-radius: 5px;
+        }
+
+        .input-box button {
+            padding: 10px;
+            font-size: 16px;
+            background-color: #007bff;
+            color: #fff;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .chat-box {
+            background-color: #1e1e1e;
+            padding: 20px;
+            border-radius: 5px;
+            border: 1px solid #444;
+            height: 400px;
+            overflow-y: scroll;
+        }
+
+        .chat-box p {
+            margin: 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .chat-box .user-message {
+            background-color: #007bff;
+            color: #fff;
+            text-align: right;
+        }
+
+        .chat-box .assistant-message {
+            background-color: #333;
+            color: #e0e0e0;
+            text-align: left;
+        }
+
+        .slider-container label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #ccc;
+        }
+
+        .slider-container input[type="range"] {
+            width: 100%;
+        }
+
+        .slider-container span {
+            display: inline-block;
+            margin-top: 5px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+        }
+
+        .response-container,
+        .batch-processing-results,
+        .accuracy-container {
+            margin-top: 20px;
+            padding: 20px;
+            background-color: #1e1e1e;
+            border-radius: 5px;
+            border: 1px solid #444;
+        }
+
+        .response-container h2,
+        .batch-processing-results h2,
+        .accuracy-container h2 {
+            margin-top: 0;
+            color: #fff;
+        }
+
+        .batch-processing-results h3 {
+            margin-top: 10px;
+            color: #ccc;
+        }
+
+        .batch-processing-results ul,
+        .suggestions {
+            padding-left: 20px;
+            color: #e0e0e0;
+        }
+
+        .suggestions {
+            list-style-type: none;
+            padding-left: 0;
+        }
+
+        .suggestion {
+            background-color: #333;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            cursor: pointer;
+        }
+
+        .suggestion:hover {
+            background-color: #444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Generis; Training Module for ML Code.</h1>
+        <h2>FS-IRDM Machine Learning </h2>
+        <div class="chat-box" id="chat-box">
+            <!-- Chat messages will be dynamically appended here -->
+            {% for message in conversation_history %}
+                {% if message.role == 'user' %}
+                    <p class="user-message">{{ message.content }}</p>
+                {% elif message.role == 'assistant' %}
+                    <p class="assistant-message">{{ message.content }}</p>
+                {% endif %}
+            {% endfor %}
+        </div>
+        <div class="input-box">
+            <input type="text" id="user-input" placeholder="Type your message..." autofocus>
+            <button id="send-btn">Send</button>
+        </div>
+        <div class="slider-container">
+            <label for="risk-slider">Risk Score:</label>
+            <input type="range" id="risk-slider" min="0" max="10" step="1" value="5">
+            <span id="risk-value">5</span>
+        </div>
+        <div class="slider-container">
+            <label for="uncertainty-slider">Uncertainty Score:</label>
+            <input type="range" id="uncertainty-slider" min="0" max="10" step="1" value="5">
+            <span id="uncertainty-value">5</span>
+        </div>
+        <div class="slider-container">
+            <label for="temperature-slider">Temperature:</label>
+            <input type="range" id="temperature-slider" min="0" max="1" step="0.1" value="0.7">
+            <span id="temperature-value">0.7</span>
+        </div>
+        <div class="input-box">
+            <input type="text" id="system-prompt" placeholder="System Prompt..." value="You are an assistant.">
+        </div>
+        <div class="response-container">
+            <h2>Response</h2>
+            <div id="assistant-response"></div>
+        </div>
+        <div class="batch-processing-results">
+            <h2>Batch Processing Results</h2>
+            <h3>Topics</h3>
+            <ul id="batch-processing-topics"></ul>
+            <h3>User Behavior Insights</h3>
+            <ul id="user-behavior-insights"></ul>
+        </div>
+        <div class="accuracy-container">
+            <h2>Balanced Accuracy</h2>
+            <p id="accuracy-score"></p>
+        </div>
+        <h2>Suggestions</h2>
+        <ul class="suggestions">
+            {% for suggestion in suggestions %}
+            <li class="suggestion" tabindex="0">{{ suggestion }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            let conversation = [
+                { role: 'system', content: 'You are an assistant.' }
+            ];
+    
+            // Button click handler
+            document.getElementById('send-btn').addEventListener('click', function(event) {
+                event.preventDefault();
+    
+                // Retrieve input values
+                const userMessage = document.getElementById('user-input').value;
+                const riskScore = document.getElementById('risk-slider').value;
+                const uncertaintyScore = document.getElementById('uncertainty-slider').value;
+                const systemPrompt = document.getElementById('system-prompt').value;
+                const temperature = document.getElementById('temperature-slider').value;
+    
+                // Ensure a message is entered
+                if (!userMessage) {
+                    alert('Please enter a message.');
+                    return;
+                }
+    
+                // Append user message to chat box
+                const chatBox = document.getElementById('chat-box');
+                const userMessageElement = document.createElement('p');
+                userMessageElement.classList.add('user-message');
+                userMessageElement.textContent = userMessage;
+                chatBox.appendChild(userMessageElement);
+                chatBox.scrollTop = chatBox.scrollHeight;
+    
+                // Append user message to conversation
+                conversation.push({ role: 'user', content: userMessage });
+    
+                // Prepare payload for the server
+                const payload = {
+                    user_input: userMessage,
+                    question: userMessage,
+                    conversation_offset: conversation.length - 1,
+                    risk_score: riskScore,
+                    uncertainty_score: uncertaintyScore,
+                    system_prompt: systemPrompt,
+                    temperature: temperature,
+                    conversation_id: '{{ conversation_id }}'
+                };
+    
+                // Fetch POST request to the '/ask' endpoint
+                fetch('/ask', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                })
+                .then(response => response.json())
+                .then(data => {
+                    // Display assistant response in the chat box
+                    const assistantMessageElement = document.createElement('p');
+                    assistantMessageElement.classList.add('assistant-message');
+                    assistantMessageElement.textContent = data.response;
+                    chatBox.appendChild(assistantMessageElement);
+                    chatBox.scrollTop = chatBox.scrollHeight;
+    
+                    // Append assistant response to conversation
+                    conversation.push({ role: 'assistant', content: data.response });
+    
+                    // Update assistant response container
+                    document.getElementById('assistant-response').textContent = data.response;
+    
+                    // Update batch processing topics
+                    const batchProcessingTopics = document.getElementById('batch-processing-topics');
+                    batchProcessingTopics.innerHTML = '';
+                    if (data.batch_processing_result && data.batch_processing_result.topics) {
+                        data.batch_processing_result.topics.forEach(function(topic) {
+                            const topicElement = document.createElement('li');
+                            topicElement.textContent = topic;
+                            batchProcessingTopics.appendChild(topicElement);
+                        });
+                    }
+    
+                    // Update user behavior insights
+                    const userBehaviorInsights = document.getElementById('user-behavior-insights');
+                    userBehaviorInsights.innerHTML = '';
+                    if (data.batch_processing_result && data.batch_processing_result.user_behavior_insights) {
+                        data.batch_processing_result.user_behavior_insights.forEach(function(insight) {
+                            const insightElement = document.createElement('li');
+                            insightElement.textContent = insight;
+                            userBehaviorInsights.appendChild(insightElement);
+                        });
+                    }
+    
+                    // Update accuracy score
+                    document.getElementById('accuracy-score').textContent = data.accuracy_score;
+    
+                    // Update risk score
+                    document.getElementById('risk-slider').value = data.risk_score;
+                    document.getElementById('risk-value').textContent = data.risk_score;
+    
+                    // Update uncertainty score
+                    document.getElementById('uncertainty-slider').value = data.uncertainty_score;
+                    document.getElementById('uncertainty-value').textContent = data.uncertainty_score;
+    
+                    // Update system prompt
+                    document.getElementById('system-prompt').value = data.system_prompt;
+    
+                    // Update temperature
+                    document.getElementById('temperature-slider').value = data.temperature;
+                    document.getElementById('temperature-value').textContent = data.temperature;
+    
+                    // Clear the user input after sending
+                    document.getElementById('user-input').value = '';
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+            });
+    
+            // Event listener for real-time slider value updates
+            document.getElementById('risk-slider').addEventListener('input', function() {
+                document.getElementById('risk-value').textContent = this.value;
+            });
+    
+            document.getElementById('uncertainty-slider').addEventListener('input', function() {
+                document.getElementById('uncertainty-value').textContent = this.value;
+            });
+    
+            document.getElementById('temperature-slider').addEventListener('input', function() {
+                document.getElementById('temperature-value').textContent = this.value;
+            });
+    
+            // Event listener for suggestion click
+            const suggestions = document.querySelectorAll('.suggestion');
+            suggestions.forEach(function(suggestion) {
+                suggestion.addEventListener('click', function() {
+                    const suggestionText = this.textContent;
+                    document.getElementById('user-input').value = suggestionText;
+                    document.getElementById('user-input').focus();
+                });
+            });
+        });
+    </script>
+    </body>
+    </html>
