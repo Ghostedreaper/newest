@@ -16,6 +16,7 @@ from sklearn.model_selection import train_test_split
 from skfuzzy import control as ctrl
 import skfuzzy as fuzz
 from threadpoolctl import threadpool_limits
+from transformers import AutoTokenizer, AutoModelForMaskedLM
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -112,11 +113,6 @@ def run_pytorch_example():
     y_train = torch.tensor(y_train, dtype=torch.float32).unsqueeze(1)
     y_test = torch.tensor(y_test, dtype=torch.float32).unsqueeze(1)
 
-    # Ensure that all elements of y_train and y_test are between 0 and 1
-    y_train = y_train.clamp(0, 1)
-    y_test = y_test.clamp(0, 1)
-
-
     # Define the model
     model = nn.Sequential(
         nn.Linear(X_train.shape[1], 12),
@@ -138,9 +134,10 @@ def run_pytorch_example():
         for i in range(0, len(X_train), batch_size):
             X_batch = X_train[i:i+batch_size].to(device)
             y_batch = y_train[i:i+batch_size].to(device)
+            
+            optimizer.zero_grad()
             y_pred = model(X_batch)
             loss = criterion(y_pred, y_batch)
-            optimizer.zero_grad()
             loss.backward()
             optimizer.step()
         logging.info(f'Epoch {epoch + 1}, Loss: {loss.item():.4f}')
@@ -162,16 +159,15 @@ class DQNAgent:
         self.state_size = state_size
         self.action_size = action_size
         self.batch_size = batch_size
-        self.memory = deque(maxlen=200000)
-        self.gamma = 0.97  # discount rate
+        self.memory = deque(maxlen=2000)
+        self.gamma = 0.95  # discount rate
         self.epsilon = 1.0  # exploration rate
-        self.epsilon_min = 0.0001
+        self.epsilon_min = 0.01
         self.epsilon_decay = 0.995
-        self.learning_rate = 0.000001
+        self.learning_rate = 0.001
         self.model_save_path = model_save_path
         self.model, self.optimizer = self.build_model()
         self.target_model, _ = self.build_model()
-        self.load_model()
         self.update_target_model()
 
     def build_model(self):
@@ -180,12 +176,11 @@ class DQNAgent:
             nn.ReLU(),
             nn.Linear(24, 24),
             nn.ReLU(),
-            nn.Linear(24, self.action_size),
-            nn.Sigmoid()  # Ensure output is between 0 and 1
+            nn.Linear(24, self.action_size)
         )
         optimizer = optim.Adam(model.parameters(), lr=self.learning_rate)
         return model.to(device), optimizer
-
+    
     def update_target_model(self):
         self.target_model.load_state_dict(self.model.state_dict())
 
@@ -216,7 +211,7 @@ class DQNAgent:
                     t = self.target_model(next_state)
                 target[0][action] = reward + self.gamma * torch.max(t)
             self.optimizer.zero_grad()
-            loss = nn.MSELoss()(self.model(state), target)
+            loss = nn.MSELoss()(target, self.model(state))
             loss.backward()
             self.optimizer.step()
         if self.epsilon > self.epsilon_min:
@@ -288,23 +283,6 @@ def cpu_load_balancer(agent, state_size, interval=30):
         agent.save_model()
 
         time.sleep(interval)
-
-def redistribute_load():
-    num_processes = mp.cpu_count()
-    processes = []
-
-    for _ in range(num_processes):
-        p = mp.Process(target=busy_work)
-        processes.append(p)
-        p.start()
-
-    for p in processes:
-        p.join()
-
-def busy_work():
-    start_time = time.time()
-    while time.time() - start_time < 1:
-        pass
 
 def monitor_and_adjust_resources(cpu_threshold=70, ram_threshold=70, sleep_interval=5):
     logging.info("Starting resource manager.")
