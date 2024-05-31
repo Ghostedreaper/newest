@@ -17,7 +17,6 @@ from skfuzzy import control as ctrl
 import skfuzzy as fuzz
 from threadpoolctl import threadpool_limits
 
-
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -225,7 +224,7 @@ class DQNAgent:
 
     def load_model(self):
         if os.path.exists(self.model_save_path):
-            self.model.load_state_dict(torch.load(self.model_save_path))
+            self.model.load_state_dict(torch.load(self.model_save_path, map_location=device))
             logging.info("Loaded model from {}".format(self.model_save_path))
         else:
             logging.info("No existing model found, training from scratch.")
@@ -324,7 +323,7 @@ def monitor_and_adjust_resources(cpu_threshold=70, ram_threshold=70, sleep_inter
 
                     if cpu_usage > cpu_threshold:
                         try:
-                            process.nice(psutil.NICE_IDLE)
+                            process.nice(psutil.IDLE_PRIORITY_CLASS)
                             logging.info(f"Reduced CPU priority of process {proc.info['name']} (PID: {proc.info['pid']}).")
                         except AttributeError:
                             process.nice(1)
